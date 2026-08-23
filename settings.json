@@ -10,12 +10,12 @@
     "port": 39073,
     "version": "1.21.1"
   },
-  "position": {
-    "enabled": true,
-    "x": 0,
-    "y": 100,
-    "z": 0
-  },
+ "position": {
+  "enabled": true,
+  "x": -3089,
+  "y": 9,
+  "z": 1725
+},
   "utils": {
     "auto-auth": {
       "enabled": true,
