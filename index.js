@@ -1,4 +1,9 @@
 require('dotenv').config();
+const Groq = require('groq-sdk');
+
+const groq = new Groq({
+  apiKey: process.env.GROQ_API_KEY
+});
 
 const mineflayer = require('mineflayer');
 const { Movements, pathfinder, goals } = require('mineflayer-pathfinder');
@@ -6,11 +11,7 @@ const { GoalBlock } = goals;
 const config = require('./settings.json');
 const express = require('express');
 const http = require('http');
-const Groq = require('groq-sdk');
 
-const groq = new Groq({
-  apiKey: process.env.GROQ_API_KEY
-});
 
 // Minecraft target and respawn position
 const BOT_TARGET = { x: -3089, y: 9, z: 1725 };
