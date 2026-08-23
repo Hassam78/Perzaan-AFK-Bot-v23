@@ -350,6 +350,17 @@ function createBot() {
     return;
   }
 
+  function setBotSpawnpoint() {
+  if (!bot || !botState.connected) return;
+
+  setTimeout(() => {
+    if (!bot || !botState.connected) return;
+
+    bot.chat('/spawnpoint @s -3089 9 1725');
+    console.log('[Respawn] Spawnpoint set to -3089 9 1725');
+  }, 5000);
+}
+
   // Cleanup previous bot
   if (bot) {
     clearAllIntervals();
@@ -393,6 +404,8 @@ function createBot() {
   botState.lastActivity = Date.now();
   botState.reconnectAttempts = 0;
   isReconnecting = false;
+
+        setBotSpawnpoint();
 
   console.log(`[Bot] [+] Successfully spawned on server!`);
 
