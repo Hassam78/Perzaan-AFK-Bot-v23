@@ -260,7 +260,7 @@ app.get('/health', (req, res) => {
   res.json({
     status: botState.connected ? 'connected' : 'disconnected',
     uptime: Math.floor((Date.now() - botState.startTime) / 1000),
-    coords: (bot && bot.entity) ? bot.entity.position : null,
+coords: (bot && bot.entity) ? bot.entity.position : { x: -3089, y: 9, z: 1725 },
     lastActivity: botState.lastActivity,
     reconnectAttempts: botState.reconnectAttempts,
     memoryUsage: process.memoryUsage().heapUsed / 1024 / 1024
