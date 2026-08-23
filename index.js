@@ -751,21 +751,54 @@ function bedModule(bot, mcData) {
 }
 
 // Chat module
+// function chatModule(bot) {
+//   bot.on('chat', (username, message) => {
+//     if (!bot || username === bot.username) return;
+
+//     try {
+//       if (config.chat.respond) {
+//         const lowerMsg = message.toLowerCase();
+//         if (lowerMsg.includes('hello') || lowerMsg.includes('hi')) {
+//           bot.chat(`Hello, ${username}!`);
+//         }
+//         if (message.startsWith('!tp ') && config.chat.respond) {
+//           const target = message.split(' ')[1];
+//           if (target) bot.chat(`/tp ${target}`);
+//         }
+//       }
+//     } catch (e) {
+//       console.log('[Chat] Error:', e.message);
+//     }
+//   });
+// }
+
 function chatModule(bot) {
   bot.on('chat', (username, message) => {
     if (!bot || username === bot.username) return;
 
     try {
-      if (config.chat.respond) {
-        const lowerMsg = message.toLowerCase();
-        if (lowerMsg.includes('hello') || lowerMsg.includes('hi')) {
-          bot.chat(`Hello, ${username}!`);
-        }
-        if (message.startsWith('!tp ') && config.chat.respond) {
-          const target = message.split(' ')[1];
-          if (target) bot.chat(`/tp ${target}`);
-        }
+      const lowerMsg = message.toLowerCase();
+
+      // Greetings
+      if (lowerMsg.includes('hello') || lowerMsg.includes('hi')) {
+        bot.chat(`Hello ${username}!`);
+        return;
       }
+
+      // Ask bot's location
+      if (lowerMsg === 'where are you' || lowerMsg === 'where r u') {
+        const p = bot.entity.position;
+        bot.chat(`I am at ${Math.floor(p.x)}, ${Math.floor(p.y)}, ${Math.floor(p.z)}`);
+        return;
+      }
+
+      // Teleport command
+      if (message.startsWith('!tp ')) {
+        const target = message.split(' ')[1];
+        if (target) bot.chat(`/tp ${target}`);
+        return;
+      }
+
     } catch (e) {
       console.log('[Chat] Error:', e.message);
     }
