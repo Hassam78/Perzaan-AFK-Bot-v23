@@ -1,9 +1,19 @@
+require('dotenv').config();
+
 const mineflayer = require('mineflayer');
 const { Movements, pathfinder, goals } = require('mineflayer-pathfinder');
 const { GoalBlock } = goals;
 const config = require('./settings.json');
 const express = require('express');
 const http = require('http');
+const Groq = require('groq-sdk');
+
+const groq = new Groq({
+  apiKey: process.env.GROQ_API_KEY
+});
+
+// Minecraft target and respawn position
+const BOT_TARGET = { x: -3089, y: 9, z: 1725 };
 
 // ============================================================
 // EXPRESS SERVER - Keep Render/Aternos alive
@@ -260,7 +270,7 @@ app.get('/health', (req, res) => {
   res.json({
     status: botState.connected ? 'connected' : 'disconnected',
     uptime: Math.floor((Date.now() - botState.startTime) / 1000),
-coords: (bot && bot.entity) ? bot.entity.position : { x: -3089, y: 9, z: 1725 },
+    coords: (bot && bot.entity) ? bot.entity.position : BOT_TARGET,
     lastActivity: botState.lastActivity,
     reconnectAttempts: botState.reconnectAttempts,
     memoryUsage: process.memoryUsage().heapUsed / 1024 / 1024
@@ -344,22 +354,26 @@ function getReconnectDelay() {
   return delay;
 }
 
-function createBot() {
-  if (isReconnecting) {
-    console.log('[Bot] Already reconnecting, skipping...');
-    return;
-  }
-
-  function setBotSpawnpoint() {
+function setBotSpawnpoint() {
   if (!bot || !botState.connected) return;
 
   setTimeout(() => {
     if (!bot || !botState.connected) return;
 
-    bot.chat('/spawnpoint @s -3089 9 1725');
-    console.log('[Respawn] Spawnpoint set to -3089 9 1725');
+    try {
+      bot.chat(`/spawnpoint @s ${BOT_TARGET.x} ${BOT_TARGET.y} ${BOT_TARGET.z}`);
+      console.log(`[Respawn] Spawnpoint set to ${BOT_TARGET.x} ${BOT_TARGET.y} ${BOT_TARGET.z}`);
+    } catch (e) {
+      console.log('[Respawn] Failed to set spawnpoint:', e.message);
+    }
   }, 5000);
 }
+
+function createBot() {
+  if (isReconnecting) {
+    console.log('[Bot] Already reconnecting, skipping...');
+    return;
+  }
 
   // Cleanup previous bot
   if (bot) {
@@ -399,68 +413,80 @@ function createBot() {
     }, 60000);
 
     bot.once('spawn', () => {
-  clearTimeout(connectionTimeout);
-  botState.connected = true;
-  botState.lastActivity = Date.now();
-  botState.reconnectAttempts = 0;
-  isReconnecting = false;
+      clearTimeout(connectionTimeout);
+      botState.connected = true;
+      botState.lastActivity = Date.now();
+      botState.reconnectAttempts = 0;
+      isReconnecting = false;
 
-        setBotSpawnpoint();
+      console.log(`[Bot] [+] Successfully spawned on server!`);
 
-  console.log(`[Bot] [+] Successfully spawned on server!`);
+      setBotSpawnpoint();
 
-  // 🔐 FORCE LOGIN SYSTEM (Perzaan Edition)
+      // 🔐 FORCE LOGIN SYSTEM (Perzaan Edition)
 
       bot.on('messagestr', (msg) => {
-  const message = msg.toLowerCase();
+        const message = msg.toLowerCase();
 
-  // Login
-  if (message.includes('login')) {
-    bot.chat('/login Perzuu');
-    console.log('[Auth] Login detected');
-  }
+        // Login
+        if (message.includes('login')) {
+          bot.chat('/login Perzuu');
+          console.log('[Auth] Login detected');
+        }
 
-  // Register
-  if (message.includes('register')) {
-    bot.chat('/register Perzuu Perzuu');
-    console.log('[Auth] Register detected');
-  }
+        // Register
+        if (message.includes('register')) {
+          bot.chat('/register Perzuu Perzuu');
+          console.log('[Auth] Register detected');
+        }
 
-  // Creative mode success
-  if (
-    message.includes('commands.gamemode.success.self') ||
-    message.includes('set own game mode to creative mode')
-  ) {
-    console.log('[INFO] Bot is now in Creative Mode.');
+        // Creative mode success
+        if (
+          message.includes('commands.gamemode.success.self') ||
+          message.includes('set own game mode to creative mode')
+        ) {
+          console.log('[INFO] Bot is now in Creative Mode.');
 
-    bot.chat('/gamerule sendCommandFeedback false');
-  }
-});
+          bot.chat('/gamerule sendCommandFeedback false');
+        }
+      });
 
       if (config.discord && config.discord.events.connect) {
-  sendDiscordWebhook(`[+] **Connected** to \`${config.server.ip}\``, 0x4ade80);
-}
+        sendDiscordWebhook(`[+] **Connected** to \`${config.server.ip}\``, 0x4ade80);
+      }
 
-const mcData = require('minecraft-data')(config.server.version);
-const defaultMove = new Movements(bot, mcData);
+      const mcData = require('minecraft-data')(config.server.version);
+      const defaultMove = new Movements(bot, mcData);
 
-initializeModules(bot, mcData, defaultMove);
-setupLeaveRejoin(bot, createBot);
+      initializeModules(bot, mcData, defaultMove);
+      setupLeaveRejoin(bot, createBot);
 
-setTimeout(() => {
-  if (bot && botState.connected) {
-    bot.chat('/gamerule sendCommandFeedback false');
-  }
-}, 3000);
+      setTimeout(() => {
+        if (bot && botState.connected) {
+          bot.chat('/gamerule sendCommandFeedback false');
+        }
+      }, 3000);
 
-setTimeout(() => {
-  if (bot && botState.connected) {
-    bot.chat('/gamemode creative');
-    console.log('[INFO] Attempted to set creative mode (requires OP)');
-  }
-}, 3000);
+      setTimeout(() => {
+        if (bot && botState.connected) {
+          bot.chat('/gamemode creative');
+          console.log('[INFO] Attempted to set creative mode (requires OP)');
+        }
+      }, 3000);
 
-});
+    });
+
+    // Re-apply the Minecraft spawnpoint after death/respawn
+    bot.on('respawn', () => {
+      console.log('[Respawn] Bot respawned - restoring spawnpoint...');
+      botState.connected = true;
+      botState.lastActivity = Date.now();
+      setBotSpawnpoint();
+    });
+
+    bot.on('death', () => {
+      console.log('[Respawn] Bot died - waiting for respawn...');
+    });
 
     // Handle disconnection
     bot.on('end', (reason) => {
@@ -479,13 +505,13 @@ setTimeout(() => {
     });
 
     bot.on("kicked", (reason) => {
-    console.log(
+      console.log(
         "[KICK]",
         typeof reason === "string"
-            ? reason
-            : JSON.stringify(reason, null, 2)
-    );
-});
+          ? reason
+          : JSON.stringify(reason, null, 2)
+      );
+    });
 
     bot.on('error', (err) => {
       console.log(`[Bot] Error: ${err.message}`);
@@ -529,30 +555,31 @@ function initializeModules(bot, mcData, defaultMove) {
   // ---------- AUTO AUTH ----------
   let authDone = false;
 
-bot.on('messagestr', (msg) => {
-  const message = msg.toLowerCase();
+  bot.on('messagestr', (msg) => {
+    const message = msg.toLowerCase();
 
-  if (authDone) return;
+    if (authDone) return;
 
-  if (message.includes('/register') || message.includes('register')) {
-    authDone = true;
-    bot.chat('/register Perzuu Perzuu');
-    console.log('[Auth] Register sent');
-    return;
-  }
+    if (message.includes('/register') || message.includes('register')) {
+      authDone = true;
+      bot.chat('/register Perzuu Perzuu');
+      console.log('[Auth] Register sent');
+      return;
+    }
 
-  if (message.includes('/login') || message.includes('login')) {
-    authDone = true;
-    bot.chat('/login Perzuu');
-    console.log('[Auth] Login sent');
-    return;
-  }
-});
+    if (message.includes('/login') || message.includes('login')) {
+      authDone = true;
+      bot.chat('/login Perzuu');
+      console.log('[Auth] Login sent');
+      return;
+    }
+  });
 
   // ---------- MOVE TO POSITION ----------
   if (config.position.enabled) {
     bot.pathfinder.setMovements(defaultMove);
-    bot.pathfinder.setGoal(new GoalBlock(config.position.x, config.position.y, config.position.z));
+    bot.pathfinder.setGoal(new GoalBlock(BOT_TARGET.x, BOT_TARGET.y, BOT_TARGET.z));
+    console.log(`[Movement] Target set to ${BOT_TARGET.x}, ${BOT_TARGET.y}, ${BOT_TARGET.z}`);
   }
 
   // ---------- ANTI-AFK (Simple) ----------
@@ -763,57 +790,144 @@ function bedModule(bot, mcData) {
   }, 10000);
 }
 
-// Chat module
-// function chatModule(bot) {
-//   bot.on('chat', (username, message) => {
-//     if (!bot || username === bot.username) return;
-
-//     try {
-//       if (config.chat.respond) {
-//         const lowerMsg = message.toLowerCase();
-//         if (lowerMsg.includes('hello') || lowerMsg.includes('hi')) {
-//           bot.chat(`Hello, ${username}!`);
-//         }
-//         if (message.startsWith('!tp ') && config.chat.respond) {
-//           const target = message.split(' ')[1];
-//           if (target) bot.chat(`/tp ${target}`);
-//         }
-//       }
-//     } catch (e) {
-//       console.log('[Chat] Error:', e.message);
-//     }
-//   });
-// }
-
+// Chat module - Groq AI
 function chatModule(bot) {
-  bot.on('chat', (username, message) => {
+  const conversationHistory = [];
+  let aiBusy = false;
+
+  console.log('[Chat] Groq AI chat module enabled.');
+
+  bot.on('chat', async (username, message) => {
     if (!bot || username === bot.username) return;
 
     try {
-      const lowerMsg = message.toLowerCase();
+      const lowerMessage = message.toLowerCase().trim();
 
-      // Greetings
-      if (lowerMsg.includes('hello') || lowerMsg.includes('hi')) {
-        bot.chat(`Hello ${username}!`);
+      // Talk to the bot using: "Bot, hello" or "Perzuu hello"
+      const mentioned =
+        lowerMessage.startsWith('bot ') ||
+        lowerMessage.startsWith('bot,') ||
+        lowerMessage.startsWith('Perzuu ') ||
+        lowerMessage.startsWith('Perzuu,');
+
+      if (!mentioned) return;
+
+      const question = message
+        .replace(/^bot[\s,]*/i, '')
+        .replace(/^Perzuu[\s,]*/i, '')
+        .trim();
+
+      if (!question) {
+        bot.chat(`Yes ${username}?`);
         return;
       }
 
-      // Ask bot's location
-      if (lowerMsg === 'where are you' || lowerMsg === 'where r u') {
-        const p = bot.entity.position;
-        bot.chat(`I am at ${Math.floor(p.x)}, ${Math.floor(p.y)}, ${Math.floor(p.z)}`);
+      if (aiBusy) {
+        bot.chat('Give me a second 😄');
         return;
       }
 
-      // Teleport command
-      if (message.startsWith('!tp ')) {
-        const target = message.split(' ')[1];
-        if (target) bot.chat(`/tp ${target}`);
+      if (!process.env.GROQ_API_KEY) {
+        console.log('[Groq] ERROR: GROQ_API_KEY is missing.');
+        bot.chat('My AI key is not configured.');
         return;
       }
+
+      aiBusy = true;
+      console.log(`[AI] ${username}: ${question}`);
+
+      const p = bot.entity?.position;
+      const currentPosition = p
+        ? `The bot's current position is X ${Math.floor(p.x)}, Y ${Math.floor(p.y)}, Z ${Math.floor(p.z)}.`
+        : 'The bot current position is unknown.';
+
+      // Always answer location from Mineflayer's real coordinates.
+      const normalizedQuestion = question
+        .toLowerCase()
+        .replace(/[?!.,]/g, '')
+        .trim();
+
+      if (normalizedQuestion === 'where are you' || normalizedQuestion === 'where r u') {
+        if (p) {
+          bot.chat(`I'm at ${Math.floor(p.x)}, ${Math.floor(p.y)}, ${Math.floor(p.z)}.`);
+        } else {
+          bot.chat("I don't know my position right now.");
+        }
+        return;
+      }
+
+      conversationHistory.push({
+        role: 'user',
+        content: `${username}: ${question}`
+      });
+
+      while (conversationHistory.length > 10) {
+        conversationHistory.shift();
+      }
+      const completion = await groq.chat.completions.create({
+        model: 'openai/gpt-oss-20b',
+        reasoning_effort: 'low',
+        messages: [
+          {
+            role: 'system',
+            content:  'You are Perzuu, a friendly Minecraft bot. Reply short and naturally.'
+          },
+          ...conversationHistory
+        ],
+        temperature: 0.7,
+        max_completion_tokens: 200
+      });
+
+      // const completion = await groq.chat.completions.create({
+      //  model: 'openai/gpt-oss-120b',
+      //   messages: [
+      //     {
+      //       role: 'system',
+      //       content: [
+      //         'You are Perzuu, a friendly  bot.',
+      //         // currentPosition,
+      //         'Usually reply in one sentence and never more than about 180 characters.',
+      //         'Tell the player a joke or fun fact if they ask for one.',
+      //       ].join(' ')
+      //     },
+      //     ...conversationHistory
+      //   ],
+      //   temperature: 0.7,
+      //   max_tokens: 80
+      // });
+
+      const reply = completion?.choices?.[0]?.message?.content?.trim();
+
+      if (!reply) {
+        throw new Error('Groq returned an empty response');
+      }
+
+      const shortReply = reply
+        .replace(/\n/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .substring(0, 180);
+
+      console.log(`[AI] Perzuu: ${shortReply}`);
+      bot.chat(shortReply);
+
+      conversationHistory.push({
+        role: 'assistant',
+        content: shortReply
+      });
 
     } catch (e) {
-      console.log('[Chat] Error:', e.message);
+      console.log('========== GROQ ERROR ==========');
+      console.log(e);
+      console.log('Message:', e.message);
+      console.log('Status:', e.status);
+      console.log('================================');
+
+      if (bot && botState.connected) {
+        bot.chat('AI error - check console.');
+      }
+    } finally {
+      aiBusy = false;
     }
   });
 }
