@@ -470,8 +470,8 @@ function createBot() {
 
       setTimeout(() => {
         if (bot && botState.connected) {
-          bot.chat('/gamemode creative');
-          console.log('[INFO] Attempted to set creative mode (requires OP)');
+          bot.chat('/gamemode survival');
+          console.log('[INFO] Attempted to set survival mode (requires OP)');
         }
       }, 3000);
 
